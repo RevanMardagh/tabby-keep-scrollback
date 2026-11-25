@@ -109,6 +109,36 @@ describe('keepScrollback', () => {
         expect(nonEmpty(allLines(term))).toEqual(seq(1, 50).split('\r\n'))
     })
 
+    it('DECSED form ESC[?3J is ignored too', async () => {
+        const { term } = makeTerm()
+        await write(term, seq(1, 50))
+        await write(term, '\x1b[?3J')
+        expect(nonEmpty(allLines(term))).toEqual(seq(1, 50).split('\r\n'))
+    })
+
+    it('stock xterm.js wipes scrollback on ESC[?3J (sanity check that the form matters)', async () => {
+        const term = new Terminal({ rows: ROWS, cols: COLS, scrollback: 1000, allowProposedApi: true })
+        await write(term, seq(1, 50))
+        await write(term, '\x1b[?3J')
+        expect(term.buffer.active.length).toBe(ROWS)
+    })
+
+    it('DECSED form ESC[H ESC[?2J pushes like ESC[2J', async () => {
+        const { term } = makeTerm()
+        await write(term, 'a\r\nb')
+        await write(term, '\x1b[H\x1b[?2J')
+        expect(nonEmpty(allLines(term))).toEqual(['a', 'b'])
+    })
+
+    it('dispose removes both handlers', async () => {
+        const term = new Terminal({ rows: ROWS, cols: COLS, scrollback: 1000, allowProposedApi: true })
+        const h = installKeepScrollback(term as any, () => DEFAULT_SETTINGS)
+        h.dispose()
+        await write(term, seq(1, 50))
+        await write(term, '\x1b[3J\x1b[?3J')
+        expect(term.buffer.active.length).toBe(ROWS)
+    })
+
     it('sequences split across writes still work (xterm.js parser handles it)', async () => {
         const { term } = makeTerm()
         await write(term, seq(1, 30))

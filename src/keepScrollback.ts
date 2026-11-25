@@ -114,7 +114,7 @@ export function installKeepScrollback (
     let warned = false
     let lastClearAt: number | undefined
 
-    const handler = term.parser.registerCsiHandler({ final: 'J' }, params => {
+    const onEraseInDisplay = (params: (number | number[])[]): boolean => {
         const settings = getSettings()
         if (!settings.enabled) {
             return false
@@ -162,7 +162,16 @@ export function installKeepScrollback (
 
         // let xterm.js run its normal handling (erases the now-empty screen)
         return false
-    })
+    }
 
-    return handler
+    // ED (CSI J) and DECSED (CSI ? J): xterm.js runs the same erase for both, including
+    // the scrollback wipe on mode 3, so both need the same handling.
+    const handlers = [
+        term.parser.registerCsiHandler({ final: 'J' }, onEraseInDisplay),
+        term.parser.registerCsiHandler({ prefix: '?', final: 'J' }, onEraseInDisplay),
+    ]
+
+    return {
+        dispose: () => handlers.forEach(h => h.dispose()),
+    }
 }

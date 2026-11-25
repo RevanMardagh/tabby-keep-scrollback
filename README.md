@@ -18,12 +18,15 @@ This plugin fixes it inside Tabby, for every session.
 
 | Sequence from the session | Behaviour |
 |---|---|
-| `ESC[3J` (erase scrollback) | Ignored |
+| `ESC[3J` / `ESC[?3J` (erase scrollback) | Ignored |
 | `ESC[2J` (erase screen), normal screen, cursor at top-left | Used rows are scrolled into scrollback, then the screen is erased |
 | `ESC[2J` with the cursor elsewhere | Erased as normal (not pushed) |
 | `ESC[2J` less than 1 s after the previous clear | Erased as normal (not pushed) |
 | `ESC[2J` in the alternate screen (vim, less, htop…) | Erased as normal |
 | Partial erases (`ESC[J`, `ESC[1J`, `ESC[2K`…) | Unchanged |
+
+The selective-erase forms (`ESC[?2J`, `ESC[?3J`) are handled the same as the plain ones,
+because xterm.js runs the same erase for both.
 
 Tabby's own **Clear terminal** hotkey still clears everything, scrollback included.
 
