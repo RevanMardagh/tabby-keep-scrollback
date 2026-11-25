@@ -6,10 +6,19 @@ const ROWS = 10
 const COLS = 40
 const CLEAR = '\x1b[H\x1b[2J\x1b[3J' // what ncurses `clear` sends
 
-function makeTerm (settings: Partial<KeepScrollbackSettings> = {}, logger?: { warn: (...a: any[]) => void }) {
+/**
+ * Default clock jumps 10 s per call, so tests not about rate limiting never trip it
+ * while still running with the default settings.
+ */
+function makeTerm (
+    settings: Partial<KeepScrollbackSettings> = {},
+    logger?: { warn: (...a: any[]) => void },
+    now?: () => number,
+) {
+    let t = 0
     const term = new Terminal({ rows: ROWS, cols: COLS, scrollback: 1000, allowProposedApi: true })
     const s = { ...DEFAULT_SETTINGS, ...settings }
-    installKeepScrollback(term as any, () => s, logger)
+    installKeepScrollback(term as any, () => s, logger, now ?? (() => (t += 10_000)))
     return { term, s }
 }
 
@@ -196,6 +205,85 @@ describe('keepScrollback', () => {
         const { term } = makeTerm()
         await write(term, 'a\r\n\r\nb')
         expect(usedRows(term as any)).toBe(3)
+    })
+
+    describe('only push after cursor home', () => {
+        it('ESC[2J with the cursor mid-screen is not pushed', async () => {
+            const { term } = makeTerm()
+            await write(term, 'a\r\nb')
+            await write(term, '\x1b[2J')
+            expect(nonEmpty(allLines(term))).toEqual([])
+            expect(term.buffer.active.length).toBe(ROWS)
+        })
+
+        it('ESC[2J ESC[H (erase, then home) is not pushed', async () => {
+            const { term } = makeTerm()
+            await write(term, 'a\r\nb')
+            await write(term, '\x1b[2J\x1b[H')
+            expect(nonEmpty(allLines(term))).toEqual([])
+        })
+
+        it('ESC[1;1H and attribute changes between home and erase still count as clear', async () => {
+            const { term } = makeTerm()
+            await write(term, 'a\r\nb')
+            await write(term, '\x1b[1;1H\x1b[0m\x1b[2J')
+            expect(nonEmpty(allLines(term))).toEqual(['a', 'b'])
+        })
+
+        it('setting off: mid-screen ESC[2J is pushed', async () => {
+            const { term } = makeTerm({ onlyPushAfterCursorHome: false })
+            await write(term, 'a\r\nb')
+            await write(term, '\x1b[2J')
+            expect(nonEmpty(allLines(term))).toEqual(['a', 'b'])
+        })
+    })
+
+    describe('rate limit', () => {
+        it('skips clears within the interval of the previous one (sliding window)', async () => {
+            let t = 0
+            const { term } = makeTerm({}, undefined, () => t)
+            await write(term, 'one')
+            t = 0; await write(term, CLEAR) // pushed
+            await write(term, 'two')
+            t = 500; await write(term, CLEAR) // 500 ms after previous: skipped
+            await write(term, 'three')
+            t = 1000; await write(term, CLEAR) // 500 ms after previous: skipped
+            await write(term, 'four')
+            t = 2500; await write(term, CLEAR) // 1500 ms after previous: pushed
+            expect(nonEmpty(allLines(term))).toEqual(['one', 'four'])
+        })
+
+        it('a redraw loop only pushes the screen that was there before it started', async () => {
+            let t = 0
+            const { term } = makeTerm({}, undefined, () => t)
+            await write(term, '$ ./progress')
+            for (let i = 0; i < 20; i++) {
+                t = i * 100
+                await write(term, `\x1b[H\x1b[2Jframe ${i}`)
+            }
+            expect(nonEmpty(allLines(term))).toEqual(['$ ./progress', 'frame 19'])
+        })
+
+        it('minPushIntervalMs=0 disables the limit', async () => {
+            const { term } = makeTerm({ minPushIntervalMs: 0 }, undefined, () => 0)
+            await write(term, 'one')
+            await write(term, CLEAR)
+            await write(term, 'two')
+            await write(term, CLEAR)
+            expect(nonEmpty(allLines(term))).toEqual(['one', 'two'])
+        })
+
+        it('erases that are not pushed (alt screen, mid-screen) do not reset the timer', async () => {
+            let t = 0
+            const { term } = makeTerm({}, undefined, () => t)
+            await write(term, 'one')
+            t = 0; await write(term, CLEAR)
+            t = 500; await write(term, 'x\x1b[2J') // mid-screen: ignored by the limiter
+            t = 600; await write(term, '\x1b[?1049h\x1b[H\x1b[2J\x1b[?1049l') // alt screen: ignored
+            await write(term, '\x1b[Htwo')
+            t = 1200; await write(term, CLEAR) // 1200 ms after the last *qualifying* clear
+            expect(nonEmpty(allLines(term))).toEqual(['one', 'two'])
+        })
     })
 
     it('UTF-8 / wide chars survive the push', async () => {

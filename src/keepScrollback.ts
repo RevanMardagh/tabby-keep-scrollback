@@ -10,12 +10,24 @@ export interface KeepScrollbackSettings {
     blockScrollbackClear: boolean
     /** On ESC[2J in the normal buffer, scroll the used part of the screen into scrollback first. */
     pushScreenOnClear: boolean
+    /**
+     * Only push when the cursor is at the top-left when ESC[2J arrives, which is what
+     * `clear` does (ESC[H ESC[2J). Erases issued mid-screen by redrawing tools are not pushed.
+     */
+    onlyPushAfterCursorHome: boolean
+    /**
+     * Skip the push if the previous qualifying ESC[2J came less than this many ms ago,
+     * so redraw loops don't flood the scrollback. 0 disables the limit.
+     */
+    minPushIntervalMs: number
 }
 
 export const DEFAULT_SETTINGS: KeepScrollbackSettings = {
     enabled: true,
     blockScrollbackClear: true,
     pushScreenOnClear: true,
+    onlyPushAfterCursorHome: true,
+    minPushIntervalMs: 1000,
 }
 
 /** Minimal slice of the xterm.js Terminal API we use (shared by @xterm/xterm and @xterm/headless). */
@@ -24,6 +36,8 @@ export interface XtermLike {
     readonly buffer: {
         readonly active: {
             readonly type: 'normal' | 'alternate'
+            readonly cursorX: number
+            readonly cursorY: number
             readonly viewportY: number
             readonly baseY: number
             getLine (y: number): { translateToString (trimRight?: boolean): string } | undefined
@@ -88,15 +102,17 @@ function firstParam (params: (number | number[])[]): number {
 
 /**
  * Install the clear handlers on a terminal. `getSettings` is read on every sequence so
- * config changes apply live. Returns a disposer.
+ * config changes apply live. `now` is injectable for tests. Returns a disposer.
  */
 export function installKeepScrollback (
     term: XtermLike,
     getSettings: () => KeepScrollbackSettings,
     logger?: Logger,
+    now: () => number = Date.now,
 ): { dispose (): void } {
     let internals: XtermInternals | null | undefined
     let warned = false
+    let lastClearAt: number | undefined
 
     const handler = term.parser.registerCsiHandler({ final: 'J' }, params => {
         const settings = getSettings()
@@ -111,6 +127,20 @@ export function installKeepScrollback (
         }
 
         if (mode === 2 && settings.pushScreenOnClear && term.buffer.active.type === 'normal') {
+            const buf = term.buffer.active
+            if (settings.onlyPushAfterCursorHome && (buf.cursorX !== 0 || buf.cursorY !== 0)) {
+                return false
+            }
+            // Sliding window: every qualifying clear resets the timer, so a redraw loop
+            // gets its first frame pushed and nothing more while it keeps redrawing.
+            const t = now()
+            const tooSoon = settings.minPushIntervalMs > 0 &&
+                lastClearAt !== undefined &&
+                t - lastClearAt < settings.minPushIntervalMs
+            lastClearAt = t
+            if (tooSoon) {
+                return false
+            }
             if (internals === undefined) {
                 internals = getInternals(term)
             }

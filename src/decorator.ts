@@ -35,11 +35,12 @@ export class KeepScrollbackDecorator extends TerminalDecorator {
     }
 
     private getSettings (): KeepScrollbackSettings {
+        // config.store is a proxy, so read each key explicitly rather than spreading it
         const s = this.config.store?.keepScrollback ?? {}
-        return {
-            enabled: s.enabled ?? DEFAULT_SETTINGS.enabled,
-            blockScrollbackClear: s.blockScrollbackClear ?? DEFAULT_SETTINGS.blockScrollbackClear,
-            pushScreenOnClear: s.pushScreenOnClear ?? DEFAULT_SETTINGS.pushScreenOnClear,
+        const out: any = {}
+        for (const key of Object.keys(DEFAULT_SETTINGS) as (keyof KeepScrollbackSettings)[]) {
+            out[key] = s[key] ?? DEFAULT_SETTINGS[key]
         }
+        return out
     }
 }
