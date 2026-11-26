@@ -33,7 +33,16 @@ Tabby's own **Clear terminal** hotkey still clears everything, scrollback includ
 
 ## Install
 
-The plugin is not on npm yet. Build it, then install from the folder:
+In Tabby: **Settings → Plugins**, search for `keep-scrollback`, click **Get**, then restart Tabby.
+
+Or with npm:
+
+```powershell
+cd $env:APPDATA\tabby\plugins       # macOS: ~/Library/Application Support/tabby/plugins
+npm install tabby-keep-scrollback   # Linux: ~/.config/tabby/plugins
+```
+
+### From source
 
 ```powershell
 npm install
