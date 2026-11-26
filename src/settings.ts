@@ -36,6 +36,18 @@ import { SettingsTabProvider } from 'tabby-settings'
 
         <div class="form-line">
             <div class="header">
+                <div class="title">Keep scrollback on reset</div>
+                <div class="description">On ESC c (sent by <code>reset</code>), reset the terminal but keep the scrollback.</div>
+            </div>
+            <toggle
+                [(ngModel)]="config.store.keepScrollback.keepScrollbackOnReset"
+                (ngModelChange)="config.save()"
+                [disabled]="!config.store.keepScrollback.enabled"
+            ></toggle>
+        </div>
+
+        <div class="form-line">
+            <div class="header">
                 <div class="title">Push screen into scrollback on clear</div>
                 <div class="description">On ESC[2J, scroll the visible lines up into scrollback before erasing.</div>
             </div>

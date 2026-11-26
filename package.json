@@ -1,6 +1,6 @@
 {
   "name": "tabby-keep-scrollback",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Tabby plugin: clearing the screen pushes it into scrollback instead of erasing it, and session requests to wipe scrollback (ESC[3J) are ignored.",
   "keywords": [
     "tabby-plugin"

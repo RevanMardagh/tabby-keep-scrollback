@@ -23,6 +23,7 @@ This plugin fixes it inside Tabby, for every session.
 | `ESC[2J` with the cursor elsewhere | Erased as normal (not pushed) |
 | `ESC[2J` less than 1 s after the previous clear | Erased as normal (not pushed) |
 | `ESC[2J` in the alternate screen (vim, less, htop…) | Erased as normal |
+| `ESC c` (full reset, sent by `reset`) | Terminal is reset as normal, but scrollback is kept and the used screen rows are pushed into it |
 | Partial erases (`ESC[J`, `ESC[1J`, `ESC[2K`…) | Unchanged |
 
 The selective-erase forms (`ESC[?2J`, `ESC[?3J`) are handled the same as the plain ones,
@@ -68,6 +69,7 @@ keepScrollback:
   pushScreenOnClear: true        # push the screen into scrollback on ESC[2J
   onlyPushAfterCursorHome: true  # only push when the cursor is at the top-left (what `clear` does)
   minPushIntervalMs: 1000        # skip a push if the previous clear was this recent; 0 = no limit
+  keepScrollbackOnReset: true    # ESC c (reset) keeps the scrollback
 ```
 
 Changes apply immediately, no restart needed.
@@ -90,12 +92,12 @@ Changes apply immediately, no restart needed.
 ## Known limitations
 
 - **tmux / screen:** inside a multiplexer, the scrollback you see is the multiplexer's, not Tabby's.
-- **`reset` (`ESC c`)** still wipes the scrollback. xterm.js treats it as a full terminal reset.
 - **Windows `cls`:** Windows' console layer (ConPTY) decides which sequences are sent. If it erases
   without moving the cursor home first, `cls` won't be pushed; set `onlyPushAfterCursorHome: false`.
-- The push uses one non-public xterm.js internal (`_core._bufferService.scroll`), the same kind of
-  access Tabby's built-in image addon relies on. If a future Tabby/xterm.js update removes it, the
-  plugin logs a warning in DevTools and still blocks `ESC[3J`; clears then lose one screen, as stock Tabby does.
+- The push uses non-public xterm.js internals (`_core._bufferService`), the same kind of
+  access Tabby's built-in image addon relies on. If a future Tabby/xterm.js update removes them, the
+  plugin logs a warning in DevTools and still blocks `ESC[3J`; clears then lose one screen and `reset`
+  wipes scrollback, as stock Tabby does.
 
 ## How it works
 
@@ -105,6 +107,10 @@ The handler runs at the exact point the sequence is parsed, so it sees the real 
 which screen is active, where the cursor is, and how many rows are in use (only those are
 pushed, so no blank lines are added to the scrollback). xterm.js reassembles sequences split
 across chunks before calling the handler.
+
+For `ESC c` it registers an ESC handler that saves the scrollback lines, lets xterm.js do its
+real full reset (so modes, colours, charsets and the alternate screen are reset exactly as before),
+then puts the saved lines back above the fresh screen.
 
 Filtering the byte stream before it reaches xterm.js (a Tabby `SessionMiddleware`) was rejected:
 Tabby writes to xterm.js asynchronously, so a middleware sees stale screen state.

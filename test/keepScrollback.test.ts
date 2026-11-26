@@ -322,4 +322,138 @@ describe('keepScrollback', () => {
         await write(term, CLEAR)
         expect(nonEmpty(allLines(term))).toEqual(['héllo 你好 🎉'])
     })
+
+    describe('reset (ESC c, RIS)', () => {
+        const RIS = '\x1bc'
+
+        it('stock xterm.js wipes scrollback on ESC c (sanity check of the problem)', async () => {
+            const term = new Terminal({ rows: ROWS, cols: COLS, scrollback: 1000, allowProposedApi: true })
+            await write(term, seq(1, 50))
+            await write(term, RIS)
+            expect(nonEmpty(allLines(term))).toEqual([])
+        })
+
+        it('keeps scrollback and pushes the used screen rows', async () => {
+            const { term } = makeTerm()
+            await write(term, seq(1, 50))
+            await write(term, RIS)
+            expect(nonEmpty(allLines(term))).toEqual(seq(1, 50).split('\r\n'))
+            expect(allLines(term).length).toBe(50 + ROWS)
+            expect(nonEmpty(screenLines(term))).toEqual([])
+            expect(term.buffer.active.cursorX).toBe(0)
+            expect(term.buffer.active.cursorY).toBe(0)
+        })
+
+        it('no blank padding when the screen was partly used', async () => {
+            const { term } = makeTerm()
+            await write(term, 'a\r\nb')
+            await write(term, RIS)
+            expect(allLines(term).slice(0, 2)).toEqual(['a', 'b'])
+            expect(allLines(term).length).toBe(2 + ROWS)
+        })
+
+        it('viewport ends up at the bottom', async () => {
+            const { term } = makeTerm()
+            await write(term, seq(1, 50))
+            await write(term, RIS)
+            expect(term.buffer.active.viewportY).toBe(term.buffer.active.baseY)
+        })
+
+        it('output after the reset continues below, in order', async () => {
+            const { term } = makeTerm()
+            await write(term, seq(1, 30))
+            await write(term, RIS + 'after')
+            await write(term, '\r\n' + seq(100, 120))
+            expect(nonEmpty(allLines(term))).toEqual([...seq(1, 30).split('\r\n'), 'after', ...seq(100, 120).split('\r\n')])
+        })
+
+        it('still resets terminal state (modes, attributes, scroll region)', async () => {
+            const { term } = makeTerm()
+            await write(term, '\x1b[?1h\x1b[?2004h\x1b[?25l\x1b[2;5r\x1b[31m')
+            expect(term.modes.applicationCursorKeysMode).toBe(true)
+            await write(term, RIS)
+            expect(term.modes.applicationCursorKeysMode).toBe(false)
+            expect(term.modes.bracketedPasteMode).toBe(false)
+            await write(term, seq(1, 30)) // full-height scrolling again: lines reach scrollback
+            expect(nonEmpty(allLines(term))).toEqual(seq(1, 30).split('\r\n'))
+            expect(term.buffer.active.getLine(0)!.getCell(0)!.isFgDefault()).toBe(true)
+        })
+
+        it('from the alternate screen: back to normal, normal content kept, alt content dropped', async () => {
+            const { term } = makeTerm()
+            await write(term, seq(1, 20))
+            await write(term, '\x1b[?1049h\x1b[Hvim stuff')
+            await write(term, RIS)
+            expect(term.buffer.active.type).toBe('normal')
+            expect(nonEmpty(allLines(term))).toEqual(seq(1, 20).split('\r\n'))
+        })
+
+        it('respects the scrollback limit, dropping the oldest lines', async () => {
+            const term = new Terminal({ rows: ROWS, cols: COLS, scrollback: 100, allowProposedApi: true })
+            installKeepScrollback(term as any, () => DEFAULT_SETTINGS)
+            await write(term, seq(1, 300))
+            await write(term, RIS)
+            const lines = allLines(term)
+            expect(lines.length).toBe(100 + ROWS)
+            expect(nonEmpty(lines)).toEqual(seq(201, 300).split('\r\n'))
+            expect(nonEmpty(screenLines(term))).toEqual([])
+        })
+
+        it('two resets in a row add nothing the second time', async () => {
+            const { term } = makeTerm()
+            await write(term, seq(1, 20))
+            await write(term, RIS + RIS)
+            expect(allLines(term).length).toBe(20 + ROWS)
+        })
+
+        it('pushScreenOnClear=false keeps scrollback but drops the visible screen', async () => {
+            const { term } = makeTerm({ pushScreenOnClear: false })
+            await write(term, seq(1, 50))
+            await write(term, RIS)
+            expect(nonEmpty(allLines(term))).toEqual(seq(1, 50 - ROWS).split('\r\n'))
+        })
+
+        it('keepScrollbackOnReset=false restores stock behaviour', async () => {
+            const { term } = makeTerm({ keepScrollbackOnReset: false })
+            await write(term, seq(1, 50))
+            await write(term, RIS)
+            expect(nonEmpty(allLines(term))).toEqual([])
+        })
+
+        it('enabled=false restores stock behaviour', async () => {
+            const { term } = makeTerm({ enabled: false })
+            await write(term, seq(1, 50))
+            await write(term, RIS)
+            expect(nonEmpty(allLines(term))).toEqual([])
+        })
+
+        it('user-initiated reset (xterm.reset()) still wipes everything', async () => {
+            const { term } = makeTerm()
+            await write(term, seq(1, 50))
+            term.reset()
+            expect(nonEmpty(allLines(term))).toEqual([])
+        })
+
+        it('missing internals: warns once, falls back to the stock reset', async () => {
+            const warnings: any[] = []
+            const term = new Terminal({ rows: ROWS, cols: COLS, scrollback: 1000, allowProposedApi: true })
+            const fake = new Proxy(term as any, {
+                get: (t, k) => (k === '_core' ? undefined : (typeof t[k] === 'function' ? t[k].bind(t) : t[k])),
+            })
+            installKeepScrollback(fake, () => DEFAULT_SETTINGS, { warn: (...a) => warnings.push(a) })
+            await write(term, seq(1, 50))
+            await write(term, RIS)
+            await write(term, RIS)
+            expect(warnings.length).toBe(1)
+            expect(nonEmpty(allLines(term))).toEqual([])
+        })
+
+        it('dispose removes the reset handler', async () => {
+            const term = new Terminal({ rows: ROWS, cols: COLS, scrollback: 1000, allowProposedApi: true })
+            installKeepScrollback(term as any, () => DEFAULT_SETTINGS).dispose()
+            await write(term, seq(1, 50))
+            await write(term, RIS)
+            expect(nonEmpty(allLines(term))).toEqual([])
+        })
+    })
 })
