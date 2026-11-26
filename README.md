@@ -92,6 +92,10 @@ Changes apply immediately, no restart needed.
 ## Known limitations
 
 - **tmux / screen:** inside a multiplexer, the scrollback you see is the multiplexer's, not Tabby's.
+- **`reset` (`ESC c`):** the terminal is still fully reset (modes, colours, character sets, tab
+  stops); only the scrollback and the shell screen are kept. If it arrives while a full-screen
+  program's alternate screen is showing (e.g. `:!reset` in vim), that program's screen is dropped,
+  not pushed. Turn off `keepScrollbackOnReset` for the stock behaviour (everything wiped).
 - **Windows `cls`:** Windows' console layer (ConPTY) decides which sequences are sent. If it erases
   without moving the cursor home first, `cls` won't be pushed; set `onlyPushAfterCursorHome: false`.
 - The push uses non-public xterm.js internals (`_core._bufferService`), the same kind of
