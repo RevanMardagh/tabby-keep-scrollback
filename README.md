@@ -1,8 +1,9 @@
 # tabby-keep-scrollback
 
-A [Tabby](https://tabby.sh/) plugin that makes `clear` behave like MobaXterm: the screen is
-**pushed up into scrollback** instead of being erased, and programs can no longer wipe your
-scrollback. Works in every terminal tab: local shells, SSH, serial, telnet.
+A [Tabby](https://tabby.sh/) plugin that keeps your terminal history. When you run `clear` or
+`reset`, the screen is **pushed up into scrollback** instead of being erased, so you can still
+scroll up and read what was there. Programs can no longer wipe your scrollback either.
+Works in every terminal tab: local shells, SSH, serial, telnet.
 
 ## Why
 
