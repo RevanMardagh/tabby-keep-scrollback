@@ -17,7 +17,15 @@
     "typecheck": "tsc --noEmit"
   },
   "author": "RevanMardagh",
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
+  "homepage": "https://github.com/RevanMardagh/tabby-keep-scrollback#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RevanMardagh/tabby-keep-scrollback.git"
+  },
+  "bugs": {
+    "url": "https://github.com/RevanMardagh/tabby-keep-scrollback/issues"
+  },
   "devDependencies": {
     "@angular/common": "^15.2.10",
     "@angular/core": "^15.2.10",
