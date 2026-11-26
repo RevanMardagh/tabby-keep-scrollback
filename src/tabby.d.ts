@@ -11,6 +11,20 @@ declare module 'tabby-core' {
     }
     export class ConfigService {
         store: any
+        save (): Promise<void>
+    }
+    /** Tabby's core NgModule; exports shared components such as <toggle>. */
+    export default class AppModule { }
+}
+
+declare module 'tabby-settings' {
+    export abstract class SettingsTabProvider {
+        id: string
+        icon: string
+        title: string
+        weight: number
+        prioritized: boolean
+        getComponentType (): any
     }
 }
 

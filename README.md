@@ -59,7 +59,7 @@ Open DevTools with Ctrl+Shift+I. You should see `Found keep-scrollback in …` a
 
 ## Settings
 
-In Tabby's `config.yaml` (Settings → Config file):
+In Tabby: Settings → **Keep scrollback**. Or edit `config.yaml` directly (Settings → Config file):
 
 ```yaml
 keepScrollback:
@@ -123,8 +123,13 @@ Layout:
 - `src/keepScrollback.ts`: all the logic, no Tabby imports
 - `src/decorator.ts`: installs the handler on each tab's xterm.js and reads settings
 - `src/config.ts`: default settings
+- `src/settings.ts`: the Settings → Keep scrollback tab
 - `src/index.ts`: the Angular module Tabby loads
 - `src/tabby.d.ts`: minimal type declarations for the Tabby APIs used (Tabby provides them at runtime)
 
 Tabby's plugin loader requires an `author` field in `package.json`; without it the plugin
 fails with "Cannot load package info".
+
+## License
+
+MIT, see [LICENSE](LICENSE).
